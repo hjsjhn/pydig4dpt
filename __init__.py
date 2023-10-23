@@ -1,0 +1,1 @@
+from pydiglib.main import main as pydig
