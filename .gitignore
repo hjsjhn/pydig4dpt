@@ -6,3 +6,4 @@ build/
 sdist/
 docs/_build/
 test/
+__pycache__/

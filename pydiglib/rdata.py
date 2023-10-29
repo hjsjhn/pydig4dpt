@@ -14,6 +14,129 @@ from .name import name_from_wire_message
 from .util import hexdump, bytes2escapedstring, backslash_txt, printables_txt, packed2int
 from .rr_svcb import RdataSVCB
 
+class opt_data:
+    """
+        code: opt code,
+        code_name: opt code name,
+        length: opt data length,
+        data: opt data
+            NSID(3): 
+                id: nsid
+                human_readable: human readable data
+            DAU(5), DHU(6), NHU(7):
+                name: opt name (e.g. DAU, DHU, NHU)
+                data: opt data
+            ECS(8):
+                address: ip address
+                source: source prefix length
+                scope: scope prefix length
+            EDE(15):
+                info_code: info code
+                info_code_desc: info code description
+                extra_text: extra text
+    """
+    def __init__(self, code: int, code_name: str, length: int):
+        self.code = code,
+        self.code_name = code_name,
+        self.length = length,
+        self.data = None
+
+
+class opt_rr:
+    def __init__(self, edns_version: int, udp_payload: int, flags: str, ercode: int, ercode_name: str, options: {int: opt_data}):
+        self.edns_version = edns_version,
+        self.udp_payload = udp_payload,
+        self.flags = flags,
+        self.ercode = ercode,
+        self.ercode_name = ercode_name,
+        self.options = options
+
+
+def get_optrr(rcode, rrclass, ttl, rdata) -> opt_rr:
+    """
+        decode and return EDNS0 OPT pseudo RR; see RFC 2671
+
+        Return:
+            opt_rr:
+                edns_version: edns version
+                udp_payload: udp payload
+                flags: edns opt flags
+                ercode: edns error code
+                ercode_name: edns error code name
+                options: edns options
+                    code: opt code,
+                    code_name: opt code name,
+                    length: opt data length,
+                    data: opt data
+                        NSID(3): 
+                            id: nsid
+                            human_readable: human readable data
+                        DAU(5), DHU(6), NHU(7):
+                            name: opt name (e.g. DAU, DHU, NHU)
+                            data: opt data
+                        ECS(8):
+                            address: ip address
+                            source: source prefix length
+                            scope: scope prefix length
+                        EDE(15):
+                            info_code: info code
+                            info_code_desc: info code description
+                            extra_text: extra text
+    """
+    packed_ttl = struct.pack('!I', ttl)
+    ercode_hi, version, z = struct.unpack('!BBH', packed_ttl)
+    ercode = (ercode_hi << 4) | rcode
+    flags = []
+    if z & 0x8000:
+        flags.append("do")                  # DNSSEC OK bit
+    opt = opt_rr(version, rrclass, ' '.join(flags),
+                 ercode, rc.get_name(ercode), {})
+    blob = rdata
+    while blob:
+        ocode, olen = struct.unpack('!HH', blob[:4])
+        odesc = edns_opt.get(ocode, "Unknown")
+        odata = opt_data(ocode, odesc, olen)
+        data_raw = blob[4:4+olen]
+        data_out = hexdump(data_raw)
+        if ocode == 3:                           # NSID
+            human_readable_data = ''
+            try:
+                human_readable_data = data_raw.decode('ascii')
+            except (TypeError, UnicodeDecodeError):
+                pass
+            if human_readable_data:
+                odata.data = {"id": data_out, "human_readable": human_readable_data}
+                # data_out = 'NSID: %s (%s)' % (data_out, human_readable_data)
+        elif ocode in [5, 6, 7]:                 # DAU, DHU, NHU
+            optname = edns_opt[ocode]
+            odata.data = {"name": optname, "data": ' '.join([str(x) for x in data_raw])}
+            # data_out = f"{optname}: " + ' '.join([str(x) for x in data_raw])
+        elif ocode == 8:                         # Client Subnet
+            family, source, scope = struct.unpack('!HBB', data_raw[0:4])
+            ip_bits = data_raw[4:]
+            address = ''
+            if family == 1:
+                zerofill_length = 4 - len(ip_bits)
+                ip_bits = ip_bits + (b'\x00' * zerofill_length)
+                address = socket.inet_ntop(socket.AF_INET, ip_bits)
+            elif family == 2:
+                zerofill_length = 16 - len(ip_bits)
+                ip_bits = ip_bits + (b'\x00' * zerofill_length)
+                address = socket.inet_ntop(socket.AF_INET6, ip_bits)
+            odata.data = {"address": address, "source": source, "scope": scope}
+            # data_out = "ECS: {}/{}/{}".format(address, source, scope)
+        elif ocode == 15:                        # Extended DNS Error
+            info_code, = struct.unpack('!H', data_raw[0:2])
+            extra_text = data_raw[2:].decode()
+            info_code_desc = extended_error.get(info_code, "Unknown")
+            # data_out = "EDE: {} ({})".format(info_code, info_code_desc)
+            odata.data = {"info_code": info_code, "info_code_desc": info_code_desc, "extra_text": extra_text}
+        # print(";; DATA: %s" % data_out)
+        opt.options[ocode] = odata
+        blob = blob[4+olen:]
+
+    return opt
+
 
 def print_optrr(rcode, rrclass, ttl, rdata):
     """decode and print EDNS0 OPT pseudo RR; see RFC 2671"""
@@ -94,7 +217,7 @@ def decode_soa_rdata(pkt, offset, rdlen):
     d, offset = name_from_wire_message(pkt, offset)
     rname = d.text()
     serial, refresh, retry, expire, min = \
-            struct.unpack("!IiiiI", pkt[offset:offset+20])
+        struct.unpack("!IiiiI", pkt[offset:offset+20])
     return "%s %s %d %d %d %d %d" % \
            (mname, rname, serial, refresh, retry, expire, min)
 
@@ -155,7 +278,8 @@ def decode_ipseckey_rdata(pkt, offset, rdlen):
         pubkey = ""
     else:
         pubkeylen = rdlen - (position - offset)
-        pubkey = base64.standard_b64encode(pkt[position:position+pubkeylen]).decode('ascii')
+        pubkey = base64.standard_b64encode(
+            pkt[position:position+pubkeylen]).decode('ascii')
     return "{} {} {} {} {}".format(prec, gwtype, alg, gw, pubkey)
 
 
@@ -188,7 +312,7 @@ def decode_dnskey_rdata(pkt, offset, rdlen):
         if keytype:
             comments = "%s, " % keytype
         comments += "proto=%s, alg=%s" % \
-                   (dnssec_proto[proto], dnssec_alg[alg])
+            (dnssec_proto[proto], dnssec_alg[alg])
         if alg in [5, 7, 8, 10]:              # RSA algorithms
             if pubkey[0] == '\x00':   # length field is 3 octets
                 elen, = struct.unpack('!H', pubkey[1:3])
@@ -199,7 +323,7 @@ def decode_dnskey_rdata(pkt, offset, rdlen):
                 exponent = packed2int(pubkey[1:1+elen])
                 modulus_len = len(pubkey[1+elen:]) * 8
             comments = comments + ", e=%d modulus_size=%d" % \
-                       (exponent, modulus_len)
+                (exponent, modulus_len)
         elif alg in [3, 6]:                   # DSA algorithms
             # not decoded yet (not commonly seen?) - see RFC 2536
             pass
@@ -234,7 +358,7 @@ def decode_rrsig_rdata(pkt, offset, rdlen):
     """decode RRSIG rdata; see RFC 4034"""
     end_rdata = offset + rdlen
     type_covered, alg, labels, orig_ttl, sig_exp, sig_inc, keytag = \
-          struct.unpack('!HBBIIIH', pkt[offset:offset+18])
+        struct.unpack('!HBBIIIH', pkt[offset:offset+18])
     sig_exp_text = time.strftime("%Y%m%d%H%M%S", time.gmtime(sig_exp))
     sig_inc_text = time.strftime("%Y%m%d%H%M%S", time.gmtime(sig_inc))
     d, offset = name_from_wire_message(pkt, offset+18)
@@ -361,7 +485,7 @@ def decode_rr(pkt, offset, hexrdata):
     orig_offset = offset
     domainname, offset = name_from_wire_message(pkt, offset)
     rrtype, rrclass, ttl, rdlen = \
-            struct.unpack("!HHIH", pkt[offset:offset+10])
+        struct.unpack("!HHIH", pkt[offset:offset+10])
     offset += 10
     rdata = pkt[offset:offset+rdlen]
     if hexrdata:

@@ -1,1 +1,1 @@
-from pydiglib.main import main as pydig
+from .pydiglib.main import main as pydig

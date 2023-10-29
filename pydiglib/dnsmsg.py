@@ -10,7 +10,7 @@ import random
 
 from .options import options
 from .common import ErrorMessage
-from .rdata import decode_rr, print_optrr
+from .rdata import decode_rr, print_optrr, get_optrr
 from .name import name_from_wire_message, name_from_text, name_match
 from .dnsparam import qt, qc, rc
 from .edns import OptRR
@@ -103,7 +103,7 @@ class DNSquery:
                 (self.z << 6) + \
                 (self.ad << 5) + \
                 (self.cd << 4) + \
-                self.rcode
+            self.rcode
         self.flags = struct.pack('!H', flags)
         self.packed_qdcount = struct.pack('!H', self.qdcount)
         self.packed_ancount = struct.pack('!H', self.ancount)
@@ -131,14 +131,14 @@ class DNSquery:
     def assemble_message(self):
         """Create assembled wire format query message"""
         self.message = self.packed_txid + \
-                       self.flags + \
-                       self.packed_qdcount + \
-                       self.packed_ancount + \
-                       self.packed_nscount + \
-                       self.packed_arcount + \
-                       self.question + \
-                       self.authority + \
-                       self.additional
+            self.flags + \
+            self.packed_qdcount + \
+            self.packed_ancount + \
+            self.packed_nscount + \
+            self.packed_arcount + \
+            self.question + \
+            self.authority + \
+            self.additional
 
     def add_soa(self, serial):
         """Add SOA RRset to Authority section (for IXFR queries)"""
@@ -158,7 +158,7 @@ class DNSquery:
                 b'\x00\x00\x00\x00'
         rdlen = struct.pack('!H', len(rdata))
         self.authority = rrname + rrtype + rrclass + ttl + \
-                         rdlen + rdata
+            rdlen + rdata
 
     def add_tsig(self):
         """Add TSIG RR to additional section"""
@@ -178,10 +178,66 @@ class DNSresponse:
     sections = ["QUESTION", "ANSWER", "AUTHORITY", "ADDITIONAL"]
     print_section_bitmap = 0b1111           # default: print all sections
 
+    class sectionData:
+        """Class to hold section data"""
+
+        def __init__(self, secname, rcode, rrcount, is_axfr, offset, message, query):
+            self.rcode = rcode
+            self.message = message
+            self.offset = offset
+            answer_qname = None
+            if rrcount and (not is_axfr):
+                self.secname = secname
+            if secname == "QUESTION":
+                for _ in range(rrcount):
+                    rrname, rrtype, rrclass, self.offset = \
+                        self.decode_question(self.offset)
+                    answer_qname = rrname
+                    if is_axfr:
+                        continue
+                    self.answer_qname = answer_qname.text()
+                    self.rrclass = qc.get_name(rrclass)
+                    self.rrtype = qc.get_name(rrtype)
+                    self.question_matched(answer_qname, rrtype, rrclass, query)
+            else:
+                for _ in range(rrcount):
+                    rrname, rrtype, rrclass, ttl, rdata, self.offset = \
+                        decode_rr(self.message, self.offset, options["hexrdata"])
+                    # print("\n-------\n", secname, rrname, rrtype, rrclass, ttl, rdata, offset, "\n-------")
+                    if is_axfr and (secname != "ANSWER"):
+                        continue
+                    elif not options["generic"] and rrtype == 41:
+                        self.optrr = get_optrr(rcode, rrclass, ttl, rdata)
+                    else:
+                        self.rrname = rrname.text()
+                        self.ttl = ttl
+                        self.rrclass = qc.get_name(rrclass)
+                        self.rrtype = qc.get_name(rrtype)
+                        self.rdata = rdata
+
+        def decode_question(self, offset):
+            """decode question section of a DNS message"""
+            domainname, offset = name_from_wire_message(self.message, offset)
+            rrtype, rrclass = struct.unpack(
+                "!HH", self.message[offset:offset+4])
+            offset += 4
+            return (domainname, rrtype, rrclass, offset)
+
+        def question_matched(self, qname, qtype, qclass, query):
+            """Check that answer matches question"""
+            self.question_match = True
+            if self.rcode in [0, 3]:
+                if (not name_match(qname, query.qname, options["do_0x20"])) \
+                        or (qtype != query.qtype) \
+                        or (qclass != query.qclass):
+                    self.question_match = False
+            return
+
     def __init__(self, family, query, msg, used_tcp=False, checkid=True):
         self.family = family
         self.query = query
         self.message = msg
+        self.section: {str: self.sectionData} = {}
         self.msglen = len(self.message)
         self.used_tcp = used_tcp
         self.decode_header(checkid)
@@ -219,16 +275,20 @@ class DNSresponse:
         amp1 = (self.msglen * 1.0/self.query.msglen)
         w_qsize = self.query.msglen + overhead
         w_rsize = self.msglen + \
-                  overhead * math.ceil(self.msglen/(1500.0-overhead))
+            overhead * math.ceil(self.msglen/(1500.0-overhead))
         amp2 = w_rsize/w_qsize
 
+        self.amp1 = amp1
+        self.amp2 = amp2
         print(";; Size query=%d, response=%d, amp1=%.2f amp2=%.2f" %
               (self.query.msglen, self.msglen, amp1, amp2))
 
     def print_preamble(self):
-        """Print preamble of a DNS response message"""
+        """Get preamble of a DNS response message"""
         if options["do_0x20"]:
+            self.qname_0x20 = self.query.qname
             print(";; 0x20-hack qname: %s" % self.query.qname)
+        self.rcode_name = rc.get_name(self.rcode)
         print(";; rcode=%d(%s), id=%d" %
               (self.rcode, rc.get_name(self.rcode), self.txid))
         print(";; qr=%d opcode=%d aa=%d tc=%d rd=%d ra=%d z=%d ad=%d cd=%d" %
@@ -263,8 +323,8 @@ class DNSresponse:
         """Check that answer matches question"""
         if self.rcode in [0, 3]:
             if (not name_match(qname, self.query.qname, options["do_0x20"])) \
-                or (qtype != self.query.qtype) \
-                or (qclass != self.query.qclass):
+                    or (qtype != self.query.qtype) \
+                    or (qclass != self.query.qclass):
                 print("*** WARNING: Answer didn't match question!\n")
         return
 
@@ -275,29 +335,9 @@ class DNSresponse:
 
         for (secname, rrcount) in zip(self.sections,
                                       [self.qdcount, self.ancount, self.nscount, self.arcount]):
-            if rrcount and (not is_axfr):
-                print("\n;; %s SECTION:" % secname)
-            if secname == "QUESTION":
-                for _ in range(rrcount):
-                    rrname, rrtype, rrclass, offset = \
-                            self.decode_question(offset)
-                    answer_qname = rrname
-                    if is_axfr:
-                        continue
-                    print("%s\t%s\t%s" % (answer_qname.text(),
-                                          qc.get_name(rrclass),
-                                          qt.get_name(rrtype)))
-                    self.question_matched(answer_qname, rrtype, rrclass)
-            else:
-                for _ in range(rrcount):
-                    rrname, rrtype, rrclass, ttl, rdata, offset = \
-                            decode_rr(self.message, offset, options["hexrdata"])
-                    if is_axfr and (secname != "ANSWER"):
-                        continue
-                    elif not options["generic"] and rrtype == 41:
-                        print_optrr(self.rcode, rrclass, ttl, rdata)
-                    else:
-                        self.print_rr(rrname, ttl, rrtype, rrclass, rdata)
+            self.section[secname] = self.sectionData(
+                secname, self.rcode, rrcount, is_axfr, offset, self.message, self.query)
+            offset = self.section[secname].offset
 
     def print_all(self):
         """Print all info about the DNS response message"""
