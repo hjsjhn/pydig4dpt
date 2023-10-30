@@ -261,7 +261,7 @@ class DNSresponse:
         self.cd = (flags >> 4) & 0x1
         self.rcode = (flags) & 0xf
 
-    def print_ampratio(self):
+    def get_ampratio(self, VERBOSE=0):
         """Print packet amplification ratios - these are estimations"""
         if self.family == socket.AF_INET:
             overhead = 42                # Ethernet + IPv4 + UDP header
@@ -280,30 +280,32 @@ class DNSresponse:
 
         self.amp1 = amp1
         self.amp2 = amp2
-        print(";; Size query=%d, response=%d, amp1=%.2f amp2=%.2f" %
-              (self.query.msglen, self.msglen, amp1, amp2))
+        if VERBOSE:
+            print(";; Size query=%d, response=%d, amp1=%.2f amp2=%.2f" %
+                  (self.query.msglen, self.msglen, amp1, amp2))
 
-    def print_preamble(self):
+    def get_preamble(self, VERBOSE=0):
         """Get preamble of a DNS response message"""
         if options["do_0x20"]:
             self.qname_0x20 = self.query.qname
-            print(";; 0x20-hack qname: %s" % self.query.qname)
+            # print(";; 0x20-hack qname: %s" % self.query.qname)
         self.rcode_name = rc.get_name(self.rcode)
-        print(";; rcode=%d(%s), id=%d" %
-              (self.rcode, rc.get_name(self.rcode), self.txid))
-        print(";; qr=%d opcode=%d aa=%d tc=%d rd=%d ra=%d z=%d ad=%d cd=%d" %
-              (self.qr,
-               self.opcode,
-               self.aa,
-               self.tc,
-               self.rd,
-               self.ra,
-               self.z,
-               self.ad,
-               self.cd))
-        print(";; question=%d, answer=%d, authority=%d, additional=%d" %
-              (self.qdcount, self.ancount, self.nscount, self.arcount))
-        self.print_ampratio()
+        if VERBOSE:
+            print(";; rcode=%d(%s), id=%d" %
+                  (self.rcode, rc.get_name(self.rcode), self.txid))
+            print(";; qr=%d opcode=%d aa=%d tc=%d rd=%d ra=%d z=%d ad=%d cd=%d" %
+                  (self.qr,
+                   self.opcode,
+                   self.aa,
+                   self.tc,
+                   self.rd,
+                   self.ra,
+                   self.z,
+                   self.ad,
+                   self.cd))
+            print(";; question=%d, answer=%d, authority=%d, additional=%d" %
+                  (self.qdcount, self.ancount, self.nscount, self.arcount))
+        self.print_ampratio(VERBOSE)
 
     def print_rr(self, rrname, ttl, rrtype, rrclass, rdata):
         """Print RR in presentation format"""
@@ -339,9 +341,9 @@ class DNSresponse:
                 secname, self.rcode, rrcount, is_axfr, offset, self.message, self.query)
             offset = self.section[secname].offset
 
-    def print_all(self):
-        """Print all info about the DNS response message"""
-        self.print_preamble()
+    def decode_all(self, VERBOSE=0):
+        """Decode all info about the DNS response message"""
+        self.get_preamble(VERBOSE)
         self.decode_sections()
 
     def __repr__(self):

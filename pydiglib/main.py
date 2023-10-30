@@ -195,7 +195,7 @@ def main(args) -> DNSresponse:
             print(";; TCP response from %s, %d bytes, in %.3f sec" %
                   ((server_addr, port), response.msglen, (t2-t1)))
 
-    response.print_all()
+    response.decode_all(VERBOSE=1)
     dprint("Compression pointer dereferences=%d" % Stats.compression_cnt)
 
     return response
