@@ -335,6 +335,8 @@ class DNSresponse:
 
         for (secname, rrcount) in zip(self.sections,
                                       [self.qdcount, self.ancount, self.nscount, self.arcount]):
+            if not rrcount:
+                continue
             self.section[secname] = self.sectionData(
                 secname, self.rcode, rrcount, is_axfr, offset, self.message, self.query)
             offset = self.section[secname].offset
