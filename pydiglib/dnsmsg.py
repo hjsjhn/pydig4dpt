@@ -14,7 +14,7 @@ from .rdata import decode_rr, print_optrr, get_optrr
 from .name import name_from_wire_message, name_from_text, name_match
 from .dnsparam import qt, qc, rc
 from .edns import OptRR
-from .util import randomize_case
+from .util import randomize_case, vprint
 
 
 class DNSquery:
@@ -280,9 +280,8 @@ class DNSresponse:
 
         self.amp1 = amp1
         self.amp2 = amp2
-        if VERBOSE:
-            print(";; Size query=%d, response=%d, amp1=%.2f amp2=%.2f" %
-                  (self.query.msglen, self.msglen, amp1, amp2))
+        vprint(";; Size query=%d, response=%d, amp1=%.2f amp2=%.2f" %
+                (self.query.msglen, self.msglen, amp1, amp2), 2, VERBOSE)
 
     def get_preamble(self, VERBOSE=0):
         """Get preamble of a DNS response message"""
@@ -290,22 +289,21 @@ class DNSresponse:
             self.qname_0x20 = self.query.qname
             # print(";; 0x20-hack qname: %s" % self.query.qname)
         self.rcode_name = rc.get_name(self.rcode)
-        if VERBOSE:
-            print(";; rcode=%d(%s), id=%d" %
-                  (self.rcode, rc.get_name(self.rcode), self.txid))
-            print(";; qr=%d opcode=%d aa=%d tc=%d rd=%d ra=%d z=%d ad=%d cd=%d" %
-                  (self.qr,
-                   self.opcode,
-                   self.aa,
-                   self.tc,
-                   self.rd,
-                   self.ra,
-                   self.z,
-                   self.ad,
-                   self.cd))
-            print(";; question=%d, answer=%d, authority=%d, additional=%d" %
-                  (self.qdcount, self.ancount, self.nscount, self.arcount))
-        self.print_ampratio(VERBOSE)
+        vprint(";; rcode=%d(%s), id=%d" %
+              (self.rcode, rc.get_name(self.rcode), self.txid), 2, VERBOSE)
+        vprint(";; qr=%d opcode=%d aa=%d tc=%d rd=%d ra=%d z=%d ad=%d cd=%d" %
+              (self.qr,
+               self.opcode,
+               self.aa,
+               self.tc,
+               self.rd,
+               self.ra,
+               self.z,
+               self.ad,
+               self.cd), 3, VERBOSE)
+        vprint(";; question=%d, answer=%d, authority=%d, additional=%d" %
+              (self.qdcount, self.ancount, self.nscount, self.arcount), 3, VERBOSE)
+        self.get_ampratio(VERBOSE)
 
     def print_rr(self, rrname, ttl, rrtype, rrclass, rdata):
         """Print RR in presentation format"""
@@ -330,7 +328,7 @@ class DNSresponse:
                 print("*** WARNING: Answer didn't match question!\n")
         return
 
-    def decode_sections(self, is_axfr=False):
+    def decode_sections(self, is_axfr=False, VERBOSE=0):
         """Decode message sections and print contents"""
         offset = 12                     # skip over DNS header
         answer_qname = None
@@ -344,7 +342,7 @@ class DNSresponse:
     def decode_all(self, VERBOSE=0):
         """Decode all info about the DNS response message"""
         self.get_preamble(VERBOSE)
-        self.decode_sections()
+        self.decode_sections(VERBOSE=VERBOSE)
 
     def __repr__(self):
         return "<DNSresponse: {},{},{}>".format(

@@ -9,7 +9,7 @@ import time
 
 from .common import options, excepthook, dprint, Stats, ErrorMessage, UsageError, ITIMEOUT, RETRIES
 from .options import parse_args
-from .util import random_init, get_socketparams
+from .util import random_init, get_socketparams, vprint
 from .dnsparam import qc, qt
 from .dnsmsg import DNSquery, DNSresponse
 from .query import send_request_udp, send_request_tcp, send_request_tls, do_axfr
@@ -17,10 +17,14 @@ from .https import send_request_https
 from .walk import zonewalk
 
 
-def main(args) -> DNSresponse:
+def main(args, VERBOSE=0) -> DNSresponse:
 
     """ 
         Get the DNS response from the server.
+
+        Args:
+            `args`: Arguments to be parsed. e.g. `["@8.8.8.8", "+nsid", "+dnssec"]` \n
+            `VERBOSE`: Verbosity level 0(default), 1, 2. \n
 
         Returns: `DNSresponse` object \n
             `family`: Address family of the server  \n
@@ -143,10 +147,10 @@ def main(args) -> DNSresponse:
         t2 = time.time()
         if responsepkt:
             response = DNSresponse(family, query, responsepkt)
-            print(";; HTTPS response from %s, %d bytes, in %.3f sec" %
-                  (options["https_url"], response.msglen, (t2-t1)))
+            vprint(";; HTTPS response from %s, %d bytes, in %.3f sec" %
+                  (options["https_url"], response.msglen, (t2-t1)), 1, VERBOSE)
         else:
-            print(";; HTTPS response failure from %s" % options["https_url"])
+            vprint(";; HTTPS response failure from %s" % options["https_url"], 1, VERBOSE)
             return 2
 
     elif options["tls"]:
@@ -157,11 +161,11 @@ def main(args) -> DNSresponse:
         t2 = time.time()
         if responsepkt:
             response = DNSresponse(family, query, responsepkt)
-            print(";; TLS response from %s, %d bytes, in %.3f sec" %
-                  ((server_addr, options["tls_port"]), response.msglen, (t2-t1)))
+            vprint(";; TLS response from %s, %d bytes, in %.3f sec" %
+                  ((server_addr, options["tls_port"]), response.msglen, (t2-t1)), 1, VERBOSE)
         else:
-            print(";; TLS response failure from %s, %d" %
-                  (server_addr, options["tls_port"]))
+            vprint(";; TLS response failure from %s, %d" %
+                  (server_addr, options["tls_port"]), 1, VERBOSE)
             if not options["tls_fallback"]:
                 return 2
 
@@ -175,27 +179,27 @@ def main(args) -> DNSresponse:
             raise ErrorMessage("No response from server")
         response = DNSresponse(family, query, responsepkt)
         if not response.tc:
-            print(";; UDP response from %s, %d bytes, in %.3f sec" %
-                  (responder_addr, response.msglen, (t2-t1)))
+            vprint(";; UDP response from %s, %d bytes, in %.3f sec" %
+                  (responder_addr, response.msglen, (t2-t1)), 1, VERBOSE)
 
     if options["use_tcp"] or (response and response.tc) \
        or (options["tls"] and options["tls_fallback"] and not response):
         if response and response.tc:
             if options["ignore"]:
-                print(";; UDP Response was truncated.")
+                vprint(";; UDP Response was truncated.", 1, VERBOSE)
             else:
-                print(";; UDP Response was truncated. Retrying using TCP ...")
+                vprint(";; UDP Response was truncated. Retrying using TCP ...", 1, VERBOSE)
         if options["tls"] and options["tls_fallback"] and not response:
-            print(";; TLS fallback to TCP ...")
+            vprint(";; TLS fallback to TCP ...", 1, VERBOSE)
         if not options["ignore"]:
             t1 = time.time()
             responsepkt = send_request_tcp(request, server_addr, port, family)
             t2 = time.time()
             response = DNSresponse(family, query, responsepkt)
-            print(";; TCP response from %s, %d bytes, in %.3f sec" %
-                  ((server_addr, port), response.msglen, (t2-t1)))
+            vprint(";; TCP response from %s, %d bytes, in %.3f sec" %
+                  ((server_addr, port), response.msglen, (t2-t1)), 1, VERBOSE)
 
-    response.decode_all(VERBOSE=1)
+    response.decode_all(VERBOSE)
     dprint("Compression pointer dereferences=%d" % Stats.compression_cnt)
 
     return response

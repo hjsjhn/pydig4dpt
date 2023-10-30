@@ -25,6 +25,9 @@ class Struct:
     "Container class to emulate C struct or record."
     pass
 
+def vprint(content, threshold, verbose):
+    if verbose >= threshold:
+        print(content)
 
 def random_init():
     random.seed(os.urandom(64))
