@@ -180,6 +180,18 @@ class DNSresponse:
 
     class sectionData:
         """Class to hold section data"""
+        class answerData:
+            rrname = ''
+            ttl = 0
+            rrclass = ''
+            rrtype = ''
+            rdata = ''
+            def __init__(self, rrname, ttl, rrclass, rrtype, rdata):
+                self.rrname = rrname
+                self.ttl = ttl
+                self.rrclass = rrclass
+                self.rrtype = rrtype
+                self.rdata = rdata
 
         def __init__(self, secname, rcode, rrcount, is_axfr, offset, message, query):
             self.rcode = rcode
@@ -200,6 +212,7 @@ class DNSresponse:
                     self.rrtype = qc.get_name(rrtype)
                     self.question_matched(answer_qname, rrtype, rrclass, query)
             else:
+                self.record = []
                 for _ in range(rrcount):
                     rrname, rrtype, rrclass, ttl, rdata, self.offset = \
                         decode_rr(self.message, self.offset, options["hexrdata"])
@@ -209,11 +222,12 @@ class DNSresponse:
                     elif not options["generic"] and rrtype == 41:
                         self.optrr = get_optrr(rcode, rrclass, ttl, rdata)
                     else:
-                        self.rrname = rrname.text()
-                        self.ttl = ttl
-                        self.rrclass = qc.get_name(rrclass)
-                        self.rrtype = qc.get_name(rrtype)
-                        self.rdata = rdata
+                        self.record.append(self.answerData(rrname.text, ttl, qc.get_name(rrclass), qc.get_name(rrtype), rdata))
+                        # self.rrname = rrname.text()
+                        # self.ttl = ttl
+                        # self.rrclass = qc.get_name(rrclass)
+                        # self.rrtype = qc.get_name(rrtype)
+                        # self.rdata = rdata
 
         def decode_question(self, offset):
             """decode question section of a DNS message"""

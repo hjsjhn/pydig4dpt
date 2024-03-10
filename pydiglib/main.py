@@ -33,7 +33,7 @@ def main(args, VERBOSE=0) -> DNSresponse:
             `msglen`: Length of the message  \n
             `use_tcp`: Use TCP for the query  \n
             \n
-            # Preamble \n
+            (Preamble) \n
             `qname_0x20`: 0x20-hack qname \n
             `rcode`: Response code \n
             `rcode_name`: Response code name \n
@@ -52,13 +52,13 @@ def main(args, VERBOSE=0) -> DNSresponse:
             `nscount`: Number of authority records \n
             `arcount`: Number of additional records \n
 
-            # Ampratio \n
+            (Ampratio) \n
             `query.msglen`: Length of the query message \n
             `msglen`: Length of the response message \n
             `amp1`: Ampratio of the response message \n
             `amp2`: Ampratio of the response message (excluding the query) \n
 
-            # Sections \n
+            (Sections) \n
             `section[<section_name>]`: sectionData object, <section_name> = "QUESTION", "ANSWER", "AUTHORITY", "ADDITIONAL"  \n
                 `secname`: Section name \n
             `section["QUESTION"].` \n
@@ -66,11 +66,12 @@ def main(args, VERBOSE=0) -> DNSresponse:
                 `rrclass`: RR class \n
                 `rrtype`: RR type \n
             `section["ANSWER"].` \n
-                `rrname`: RR name \n
-                `ttl`: Answer TTL \n
-                `rrclass`: RR class \n
-                `rrtype`: RR type \n
-                `rdata`: RR data \n
+                `record[]`: a list of answerData object, the members of it are \n
+                    `rrname`: RR name \n
+                    `ttl`: Answer TTL \n
+                    `rrclass`: RR class \n
+                    `rrtype`: RR type \n
+                    `rdata`: RR data \n
             `section["ADDITONAL"].` \n
                 `optrr`: opt_rr object \n
                     `edns_version`: edns version \n
@@ -105,6 +106,8 @@ def main(args, VERBOSE=0) -> DNSresponse:
     sys.excepthook = excepthook
     random_init()
 
+    if VERBOSE == 3:
+        args = args[1:]
     qname, qtype, qclass = parse_args(args)
 
     try:
