@@ -222,7 +222,7 @@ class DNSresponse:
                     elif not options["generic"] and rrtype == 41:
                         self.optrr = get_optrr(rcode, rrclass, ttl, rdata)
                     else:
-                        self.record.append(self.answerData(rrname.text, ttl, qc.get_name(rrclass), qc.get_name(rrtype), rdata))
+                        self.record.append(self.answerData(rrname.text(), ttl, qc.get_name(rrclass), qc.get_name(rrtype), rdata))
                         # self.rrname = rrname.text()
                         # self.ttl = ttl
                         # self.rrclass = qc.get_name(rrclass)
@@ -251,7 +251,7 @@ class DNSresponse:
         self.family = family
         self.query = query
         self.message = msg
-        self.section: {str: self.sectionData} = {}
+        self.section: dict[str, self.sectionData] = {}
         self.msglen = len(self.message)
         self.used_tcp = used_tcp
         self.decode_header(checkid)
@@ -363,3 +363,4 @@ class DNSresponse:
     def __repr__(self):
         return "<DNSresponse: {},{},{}>".format(
             self.query.qname, self.query.qtype, self.query.qclass)
+
