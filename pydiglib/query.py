@@ -108,9 +108,9 @@ def send_request_tls(pkt, host, port, family, hostname=None):
     try:
         conn.connect((host, port))
     except socket.error as e:
-        print("socket error: %s" % e)
+        raise ErrorMessage("socket error: %s" % e)
     except ssl.SSLError as e:
-        print("TLS error: %s" % e)
+        raise ErrorMessage("TLS error: %s" % e)
     else:
         if not sendSocket(conn, pkt):
             raise ErrorMessage("send() on socket failed.")
