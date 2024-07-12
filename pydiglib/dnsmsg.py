@@ -222,7 +222,7 @@ class DNSresponse:
                     elif not options["generic"] and rrtype == 41:
                         self.optrr = get_optrr(rcode, rrclass, ttl, rdata)
                     else:
-                        self.record.append(self.answerData(rrname.text(), ttl, qc.get_name(rrclass), qc.get_name(rrtype), rdata))
+                        self.record.append(self.answerData(rrname.text(), ttl, qc.get_name(rrclass), qt.get_name(rrtype), rdata))
                         # self.rrname = rrname.text()
                         # self.ttl = ttl
                         # self.rrclass = qc.get_name(rrclass)
